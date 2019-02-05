@@ -23,19 +23,22 @@ __all__ = ["ExposureIdInfo"]
 
 
 class ExposureIdInfo(object):
-    """Exposure ID and number of bits used.
+    """Struct representing an exposure ID and the number of bits it uses.
 
-    Attributes include:
-
-    expId
-        exposure ID as an int
-    expBits
-        maximum number of bits allowed for exposure IDs
-    maxBits
-        maximum number of bits available for values that combine exposure ID
-        with other information, such as source ID
-    unusedBits
-        maximum number of bits available for non-exposure info (maxBits - expBits)
+    Parameters
+    ----------
+    expId : `int`
+        Exposure ID.  Note that this is typically the ID of an
+        `afw.image.Exposure`, not the ID of an actual observation, and hence it
+        usually either includes a detector component or is derived from SkyMap
+        IDs.
+    expBits : `int`
+        Maximum number of bits allowed for exposure IDs of this type.
+    maxBits : `int`, optional
+        Maximum number of bits available for values that combine exposure ID
+        with other information, such as source ID.  If not provided
+        (recommended when possible), `unusedBits` will be computed by assuming
+        the full ID must fit an an `lsst.afw.table` RecordId field.
 
     One common use is creating an ID factory for making a source table.
     For example, given a data butler `butler` and a data ID `dataId`::
@@ -51,24 +54,32 @@ class ExposureIdInfo(object):
     that are not entirely clear (this is DM-6664).
     """
 
-    def __init__(self, expId=0, expBits=1, maxBits=64):
+    def __init__(self, expId=0, expBits=1, maxBits=None):
         """Construct an ExposureIdInfo
 
         See the class doc string for an explanation of the arguments.
         """
         expId = int(expId)
         expBits = int(expBits)
-        maxBits = int(maxBits)
 
         if expId.bit_length() > expBits:
             raise RuntimeError("expId=%s uses %s bits > expBits=%s" % (expId, expId.bit_length(), expBits))
-        if maxBits < expBits:
-            raise RuntimeError("expBits=%s > maxBits=%s" % (expBits, maxBits))
 
         self.expId = expId
         self.expBits = expBits
+
+        if maxBits is not None:
+            maxBits = int(maxBits)
+            if maxBits < expBits:
+                raise RuntimeError("expBits=%s > maxBits=%s" % (expBits, maxBits))
         self.maxBits = maxBits
 
     @property
     def unusedBits(self):
-        return self.maxBits - self.expBits
+        """Maximum number of bits available for non-exposure info `(int)`.
+        """
+        if self.maxBits is None:
+            from lsst.afw.table import IdFactory
+            return IdFactory.computeReservedFromMaxBits(self.expBits)
+        else:
+            return self.maxBits - self.expBits
